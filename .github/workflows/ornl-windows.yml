@@ -1,0 +1,53 @@
+name: Compila ORNL per Windows
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: ornl-windows
+  cancel-in-progress: false
+jobs:
+  installer:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 350
+    steps:
+      - name: Scarica ORNL ufficiale
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+        with:
+          repository: ORNLSlicer/ORNLSlicer
+          ref: 0c21ea56f0ffbea58f4139c9cbc7badfea08abbf
+          lfs: true
+          persist-credentials: false
+      - name: Installa Nix
+        uses: cachix/install-nix-action@448cde739abec1eaf0646249e3d25bb8d9bc7702
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Controlla risorse e file
+        run: |
+          free -h
+          df -h . /nix
+          git lfs fsck
+      - name: Compila installer Windows
+        shell: bash
+        run: |
+          set -euo pipefail
+          nix build -L --accept-flake-config --max-jobs 1 --cores 1 .#windowsInstaller -o installer-result 2>&1 | tee compilazione.log
+          mkdir -p installer-windows
+          cp installer-result/*.exe installer-windows/
+          sha256sum installer-windows/*.exe > installer-windows/SHA256SUMS.txt
+      - name: Salva installer scaricabile
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ORNL-Windows-installer
+          path: installer-windows/
+          if-no-files-found: error
+          retention-days: 14
+      - name: Salva registro anche in caso di errore
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: ORNL-registro-compilazione
+          path: compilazione.log
+          if-no-files-found: warn
+          retention-days: 14
